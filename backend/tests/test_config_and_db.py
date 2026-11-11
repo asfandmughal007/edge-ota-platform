@@ -15,11 +15,16 @@ from device_mgmt.db.session import Base, create_db_engine
 
 def test_offline_threshold_must_exceed_stale_threshold() -> None:
     with pytest.raises(ValidationError, match="must exceed"):
-        Settings(heartbeat_stale_after_seconds=300, heartbeat_offline_after_seconds=90)
+        Settings(
+            admin_api_key="k" * 16,
+            heartbeat_stale_after_seconds=300,
+            heartbeat_offline_after_seconds=90,
+        )
 
 
 def test_settings_read_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEVICE_MGMT_DATABASE_URL", "postgresql+psycopg://u:p@db/x")
+    monkeypatch.setenv("DEVICE_MGMT_ADMIN_API_KEY", "k" * 16)
     assert Settings().database_url == "postgresql+psycopg://u:p@db/x"
 
 
@@ -30,7 +35,11 @@ def test_datetimes_round_trip_as_aware_utc_on_file_sqlite(tmp_path: Path) -> Non
 
     with Session(engine) as session:
         session.add(
-            Device(device_id="d1", registered_at=datetime(2026, 1, 1, 14, 0, tzinfo=plus_two))
+            Device(
+                device_id="d1",
+                token_hash="0" * 64,
+                registered_at=datetime(2026, 1, 1, 14, 0, tzinfo=plus_two),
+            )
         )
         session.commit()
     with Session(engine) as session:
@@ -45,7 +54,9 @@ def test_naive_datetimes_are_rejected() -> None:
     engine = create_db_engine("sqlite://")
     Base.metadata.create_all(engine)
     with Session(engine) as session:
-        session.add(Device(device_id="d1", registered_at=datetime(2026, 1, 1, 12, 0)))
+        session.add(
+            Device(device_id="d1", token_hash="0" * 64, registered_at=datetime(2026, 1, 1, 12, 0))
+        )
         with pytest.raises(StatementError, match="naive datetime"):
             session.commit()
     engine.dispose()

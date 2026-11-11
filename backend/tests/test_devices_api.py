@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from conftest import FakeClock
+from conftest import FakeClock, device_auth, register_device
 from fastapi.testclient import TestClient
 
 
@@ -29,11 +29,7 @@ def heartbeat(device_id: str = "device-001", **overrides: Any) -> dict[str, Any]
     return payload
 
 
-def register(client: TestClient, device_id: str = "device-001", **fields: Any) -> dict[str, Any]:
-    response = client.post("/devices", json={"device_id": device_id, **fields})
-    assert response.status_code == 201, response.text
-    body: dict[str, Any] = response.json()
-    return body
+register = register_device
 
 
 def test_liveness(client: TestClient) -> None:
@@ -42,6 +38,8 @@ def test_liveness(client: TestClient) -> None:
 
 def test_register_and_fetch_device(client: TestClient) -> None:
     created = register(client, hostname="edge-box", current_version="1.1.0")
+    token = created.pop("device_token")
+    assert token.startswith("edt_")
 
     assert created == {
         "device_id": "device-001",
@@ -92,7 +90,9 @@ def test_heartbeat_updates_device(client: TestClient, clock: FakeClock) -> None:
     register(client, current_version="1.1.0")
     clock.advance(10)
 
-    response = client.post("/devices/device-001/heartbeat", json=heartbeat())
+    response = client.post(
+        "/devices/device-001/heartbeat", json=heartbeat(), headers=device_auth(client, "device-001")
+    )
 
     assert response.status_code == 202
     assert response.json() == {"device_id": "device-001", "received_at": "2026-01-01T12:00:10Z"}
@@ -104,15 +104,21 @@ def test_heartbeat_updates_device(client: TestClient, clock: FakeClock) -> None:
 
 
 def test_heartbeat_for_unregistered_device_is_rejected(client: TestClient) -> None:
-    response = client.post("/devices/ghost/heartbeat", json=heartbeat("ghost"))
-    assert response.status_code == 404
+    response = client.post(
+        "/devices/ghost/heartbeat", json=heartbeat("ghost"), headers={"Authorization": "Bearer x"}
+    )
+    assert response.status_code == 401
 
 
 def test_heartbeat_device_id_must_match_path(client: TestClient) -> None:
     register(client, "device-001")
     register(client, "device-002")
 
-    response = client.post("/devices/device-001/heartbeat", json=heartbeat("device-002"))
+    response = client.post(
+        "/devices/device-001/heartbeat",
+        json=heartbeat("device-002"),
+        headers=device_auth(client, "device-001"),
+    )
 
     assert response.status_code == 400
     assert client.get("/devices/device-002").json()["status"] == "never_seen"
@@ -130,7 +136,11 @@ def test_heartbeat_device_id_must_match_path(client: TestClient) -> None:
 )
 def test_heartbeat_validation(client: TestClient, overrides: dict[str, Any]) -> None:
     register(client)
-    response = client.post("/devices/device-001/heartbeat", json=heartbeat(**overrides))
+    response = client.post(
+        "/devices/device-001/heartbeat",
+        json=heartbeat(**overrides),
+        headers=device_auth(client, "device-001"),
+    )
     assert response.status_code == 422
     assert client.get("/devices/device-001").json()["status"] == "never_seen"
 
@@ -150,9 +160,17 @@ def test_health_before_first_heartbeat(client: TestClient) -> None:
 
 def test_health_reports_latest_metrics(client: TestClient, clock: FakeClock) -> None:
     register(client)
-    client.post("/devices/device-001/heartbeat", json=heartbeat(cpu_percent=10))
+    client.post(
+        "/devices/device-001/heartbeat",
+        json=heartbeat(cpu_percent=10),
+        headers=device_auth(client, "device-001"),
+    )
     clock.advance(30)
-    client.post("/devices/device-001/heartbeat", json=heartbeat(cpu_percent=55.5))
+    client.post(
+        "/devices/device-001/heartbeat",
+        json=heartbeat(cpu_percent=55.5),
+        headers=device_auth(client, "device-001"),
+    )
     clock.advance(5)
 
     health = client.get("/devices/device-001/health").json()
@@ -167,7 +185,9 @@ def test_health_reports_latest_metrics(client: TestClient, clock: FakeClock) -> 
 
 def test_status_degrades_as_heartbeats_stop(client: TestClient, clock: FakeClock) -> None:
     register(client)
-    client.post("/devices/device-001/heartbeat", json=heartbeat())
+    client.post(
+        "/devices/device-001/heartbeat", json=heartbeat(), headers=device_auth(client, "device-001")
+    )
 
     def status_after(seconds: float) -> tuple[str, bool]:
         clock.advance(seconds)
@@ -179,5 +199,7 @@ def test_status_degrades_as_heartbeats_stop(client: TestClient, clock: FakeClock
     assert status_after(209) == ("stale", False)  # 299 s
     assert status_after(1) == ("offline", False)  # 300 s
 
-    client.post("/devices/device-001/heartbeat", json=heartbeat())
+    client.post(
+        "/devices/device-001/heartbeat", json=heartbeat(), headers=device_auth(client, "device-001")
+    )
     assert status_after(0) == ("online", True)

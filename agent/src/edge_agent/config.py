@@ -7,6 +7,7 @@ environment (systemd EnvironmentFile, Docker secret, compose env).
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -27,6 +28,14 @@ class AgentSettings(BaseSettings):
 
     backend_url: str | None = None
     device_token: SecretStr | None = None
+    # Alternative to device_token: a file holding it (Docker/Kubernetes secret,
+    # systemd credential). Keeps the token out of the process environment and
+    # out of `docker inspect`.
+    device_token_file: Path | None = None
+    # PEM bundle of extra CA certificates, for a backend behind a private CA.
+    # Certificate verification is always on; there is deliberately no way to
+    # switch it off.
+    ca_bundle: Path | None = None
     request_timeout_seconds: float = Field(default=10.0, gt=0)
 
     heartbeat_interval_seconds: float = Field(default=30.0, gt=0)
@@ -61,6 +70,18 @@ class AgentSettings(BaseSettings):
         if parts.scheme not in {"http", "https"} or not parts.hostname:
             raise ValueError("backend_url must be an http(s) URL")
         return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def _load_token_file(self) -> AgentSettings:
+        if self.device_token is None and self.device_token_file is not None:
+            try:
+                token = self.device_token_file.read_text(encoding="utf-8").strip()
+            except OSError as exc:
+                raise ValueError(f"cannot read device_token_file: {exc}") from exc
+            if not token:
+                raise ValueError(f"device_token_file {self.device_token_file} is empty")
+            self.device_token = SecretStr(token)
+        return self
 
     @model_validator(mode="after")
     def _require_backend_unless_dry_run(self) -> AgentSettings:

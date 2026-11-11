@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from conftest import FakeClock
+from conftest import FakeClock, device_auth, register_device
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -18,8 +18,7 @@ DEVICE = "device-001"
 @pytest.fixture
 def fleet(client: TestClient) -> TestClient:
     """device-001 on 1.2.0, with versions 1.1.0, 1.2.0 and 1.3.0 published."""
-    created = client.post("/devices", json={"device_id": DEVICE, "current_version": "1.2.0"})
-    assert created.status_code == 201
+    register_device(client, DEVICE, current_version="1.2.0")
     for version in ("1.1.0", "1.2.0", "1.3.0"):
         published = client.post(
             "/versions", json={"version": version, "image": f"my-edge-app:{version}"}
@@ -37,8 +36,14 @@ def request_deployment(client: TestClient, target: str = "1.3.0") -> dict[str, A
 
 def report(client: TestClient, deployment_id: str, status: str, message: str | None = None) -> Any:
     return client.post(
-        f"/deployments/{deployment_id}/status", json={"status": status, "message": message}
+        f"/deployments/{deployment_id}/status",
+        json={"status": status, "message": message},
+        headers=device_auth(client, DEVICE),
     )
+
+
+def poll(client: TestClient) -> Any:
+    return client.get(f"/devices/{DEVICE}/deployments/next", headers=device_auth(client, DEVICE))
 
 
 def current_version(client: TestClient) -> str:
@@ -92,21 +97,20 @@ def test_only_one_active_deployment_per_device(fleet: TestClient) -> None:
 
 
 def test_agent_polls_for_next_deployment(fleet: TestClient) -> None:
-    assert fleet.get(f"/devices/{DEVICE}/deployments/next").status_code == 204
+    assert poll(fleet).status_code == 204
 
     deployment = request_deployment(fleet)
-    polled = fleet.get(f"/devices/{DEVICE}/deployments/next")
+    polled = poll(fleet)
     assert polled.status_code == 200
     assert polled.json()["id"] == deployment["id"]
     assert polled.json()["image"] == "my-edge-app:1.3.0"
 
     # Still returned while in progress, so a restarted agent can resume.
     report(fleet, deployment["id"], "in_progress")
-    assert fleet.get(f"/devices/{DEVICE}/deployments/next").json()["status"] == "in_progress"
+    assert poll(fleet).json()["status"] == "in_progress"
 
     report(fleet, deployment["id"], "succeeded")
-    assert fleet.get(f"/devices/{DEVICE}/deployments/next").status_code == 204
-    assert fleet.get("/devices/ghost/deployments/next").status_code == 404
+    assert poll(fleet).status_code == 204
 
 
 def test_successful_deployment_updates_device_version(fleet: TestClient, clock: FakeClock) -> None:
@@ -221,7 +225,7 @@ def test_database_enforces_one_active_deployment_per_device() -> None:
         )
 
     with Session(engine) as session:
-        session.add(Device(device_id="d1", registered_at=now))
+        session.add(Device(device_id="d1", token_hash="0" * 64, registered_at=now))
         session.add(SoftwareVersion(version="1.3.0", image="my-edge-app:1.3.0", created_at=now))
         session.commit()
 

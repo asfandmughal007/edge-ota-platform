@@ -11,6 +11,7 @@ import threading
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from types import FrameType
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
@@ -26,6 +27,16 @@ from edge_agent.updater import AppConfig, Updater
 from edge_agent.worker import DeploymentWorker
 
 logger = logging.getLogger(__name__)
+
+
+def warn_if_insecure(backend_url: str) -> None:
+    """Plain HTTP sends the device token in the clear; make that visible."""
+    parts = urlsplit(backend_url)
+    if parts.scheme == "http" and parts.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        logger.warning(
+            "backend URL uses plain HTTP; the device token is sent unencrypted",
+            extra={"backend_host": parts.hostname},
+        )
 
 
 def build_updater(settings: AgentSettings, stack: ExitStack) -> Updater:
@@ -116,8 +127,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             sink = StdoutHeartbeatSink()
         else:
             assert settings.backend_url is not None and settings.device_token is not None
+            warn_if_insecure(settings.backend_url)
             client = BackendClient(
-                settings.backend_url, settings.device_token, settings.request_timeout_seconds
+                settings.backend_url,
+                settings.device_token,
+                settings.request_timeout_seconds,
+                ca_bundle=settings.ca_bundle,
             )
             stack.callback(client.close)
             sink = HttpHeartbeatSink(client)

@@ -16,6 +16,8 @@ class Device(Base):
 
     device_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     hostname: Mapped[str | None] = mapped_column(String(255))
+    # SHA-256 of the device's bearer token. The token itself is never stored.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     # Version the device last reported running, not the version we want it on.
     current_version: Mapped[str | None] = mapped_column(String(64))
     registered_at: Mapped[datetime] = mapped_column(UTCDateTime())

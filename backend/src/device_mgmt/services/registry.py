@@ -21,12 +21,15 @@ from device_mgmt.schemas import (
     DeviceCreate,
     DeviceHealth,
     DeviceRead,
+    DeviceRegistered,
     DeviceStatus,
+    DeviceTokenRead,
     HealthMetrics,
     HeartbeatAck,
     HeartbeatIn,
     NetworkStatus,
 )
+from device_mgmt.security import generate_device_token, hash_token
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +47,13 @@ class DeviceRegistry:
         self._settings = settings
         self._clock = clock
 
-    def register(self, payload: DeviceCreate) -> DeviceRead:
+    def register(self, payload: DeviceCreate) -> DeviceRegistered:
         if self._devices.get(payload.device_id) is not None:
             raise DeviceAlreadyExistsError(payload.device_id)
+        token = generate_device_token()
         device = Device(
             device_id=payload.device_id,
+            token_hash=hash_token(token),
             hostname=payload.hostname,
             current_version=payload.current_version,
             registered_at=self._clock(),
@@ -62,7 +67,15 @@ class DeviceRegistry:
             self._session.rollback()
             raise DeviceAlreadyExistsError(payload.device_id) from exc
         logger.info("device registered", extra={"device_id": device.device_id})
-        return self._to_read(device)
+        return DeviceRegistered(**self._to_read(device).model_dump(), device_token=token)
+
+    def rotate_token(self, device_id: str) -> DeviceTokenRead:
+        device = self._require(device_id)
+        token = generate_device_token()
+        device.token_hash = hash_token(token)
+        self._session.commit()
+        logger.info("device token rotated", extra={"device_id": device_id})
+        return DeviceTokenRead(device_id=device_id, device_token=token)
 
     def list(self, limit: int, offset: int) -> list[DeviceRead]:
         return [self._to_read(device) for device in self._devices.list(limit, offset)]

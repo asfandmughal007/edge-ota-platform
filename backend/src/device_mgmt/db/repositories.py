@@ -65,6 +65,10 @@ class DeviceRepository:
     def get(self, device_id: str) -> Device | None:
         return self._session.get(Device, device_id)
 
+    def get_by_token_hash(self, token_hash: str) -> Device | None:
+        statement = select(Device).where(Device.token_hash == token_hash)
+        return self._session.scalars(statement).first()
+
     def list(self, limit: int, offset: int) -> Sequence[Device]:
         statement = select(Device).order_by(Device.device_id).limit(limit).offset(offset)
         return self._session.scalars(statement).all()

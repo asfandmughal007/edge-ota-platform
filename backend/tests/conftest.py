@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from device_mgmt.config import Settings
 from device_mgmt.main import create_app
+
+ADMIN_KEY = "test-admin-key-0123456789"
 
 
 class FakeClock:
@@ -21,6 +24,17 @@ class FakeClock:
         self.now += timedelta(seconds=seconds)
 
 
+def make_settings(**overrides: Any) -> Settings:
+    fields: dict[str, Any] = {
+        "database_url": "sqlite://",
+        "admin_api_key": ADMIN_KEY,
+        "heartbeat_stale_after_seconds": 90,
+        "heartbeat_offline_after_seconds": 300,
+    }
+    fields.update(overrides)
+    return Settings(**fields)
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()
@@ -28,10 +42,36 @@ def clock() -> FakeClock:
 
 @pytest.fixture
 def client(clock: FakeClock) -> Iterator[TestClient]:
-    settings = Settings(
-        database_url="sqlite://",
-        heartbeat_stale_after_seconds=90,
-        heartbeat_offline_after_seconds=300,
-    )
-    with TestClient(create_app(settings, clock=clock)) as test_client:
+    """An operator client: sends the admin API key on every request.
+
+    Device calls must add ``device_auth(client, device_id)`` explicitly.
+    """
+    with TestClient(create_app(make_settings(), clock=clock)) as test_client:
+        test_client.headers["X-API-Key"] = ADMIN_KEY
+        test_client.device_tokens = {}  # type: ignore[attr-defined]
         yield test_client
+
+
+@pytest.fixture
+def anon(client: TestClient) -> TestClient:
+    """A client for the same app that presents no credentials at all."""
+    return TestClient(client.app)
+
+
+def register_device(
+    client: TestClient, device_id: str = "device-001", **fields: Any
+) -> dict[str, Any]:
+    """Register a device via the API and remember its token for ``device_auth``."""
+    response = client.post("/devices", json={"device_id": device_id, **fields})
+    assert response.status_code == 201, response.text
+    body: dict[str, Any] = response.json()
+    client.device_tokens[device_id] = body["device_token"]  # type: ignore[attr-defined]
+    return body
+
+
+def bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def device_auth(client: TestClient, device_id: str = "device-001") -> dict[str, str]:
+    return bearer(client.device_tokens[device_id])  # type: ignore[attr-defined]

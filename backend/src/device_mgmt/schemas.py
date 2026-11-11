@@ -38,6 +38,17 @@ class DeviceRead(BaseModel):
     last_seen_at: datetime | None
 
 
+class DeviceRegistered(DeviceRead):
+    """Registration response. ``device_token`` is returned this once and cannot be retrieved."""
+
+    device_token: str
+
+
+class DeviceTokenRead(BaseModel):
+    device_id: str
+    device_token: str
+
+
 class NetworkStatus(BaseModel):
     interfaces_up: list[str]
     ip_address: str | None

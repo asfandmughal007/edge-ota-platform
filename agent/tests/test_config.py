@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -70,3 +71,42 @@ def test_app_health_url_is_derived_from_how_the_app_is_exposed(
 
     monkeypatch.setenv("EDGE_AGENT_APP_HEALTH_URL", "http://10.0.0.9/ready")
     assert AgentSettings().resolved_app_health_url == "http://10.0.0.9/ready"
+
+
+def test_token_can_be_read_from_a_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    token_file = tmp_path / "token"
+    token_file.write_text("edt_from_file\n", encoding="utf-8")
+    monkeypatch.setenv("EDGE_AGENT_BACKEND_URL", "https://api.example.test")
+    monkeypatch.setenv("EDGE_AGENT_DEVICE_TOKEN_FILE", str(token_file))
+
+    settings = AgentSettings()
+
+    assert settings.device_token is not None
+    assert settings.device_token.get_secret_value() == "edt_from_file"
+    assert "edt_from_file" not in repr(settings)
+
+
+def test_explicit_token_wins_over_token_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    token_file = tmp_path / "token"
+    token_file.write_text("from_file", encoding="utf-8")
+    monkeypatch.setenv("EDGE_AGENT_BACKEND_URL", "https://api.example.test")
+    monkeypatch.setenv("EDGE_AGENT_DEVICE_TOKEN", "from_env")
+    monkeypatch.setenv("EDGE_AGENT_DEVICE_TOKEN_FILE", str(token_file))
+
+    assert AgentSettings().device_token.get_secret_value() == "from_env"  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize("content", [None, "   \n"])
+def test_missing_or_empty_token_file_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str | None
+) -> None:
+    token_file = tmp_path / "token"
+    if content is not None:
+        token_file.write_text(content, encoding="utf-8")
+    monkeypatch.setenv("EDGE_AGENT_BACKEND_URL", "https://api.example.test")
+    monkeypatch.setenv("EDGE_AGENT_DEVICE_TOKEN_FILE", str(token_file))
+
+    with pytest.raises(ValidationError, match="device_token_file"):
+        AgentSettings()

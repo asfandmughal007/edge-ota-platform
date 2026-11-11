@@ -14,8 +14,8 @@ updates to them, with automatic rollback when a new version fails its health che
 | 3 | Software versions and deployment requests | done |
 | 4 | OTA deployment | done |
 | 5 | Rollback | done |
-| 6 | Security | next |
-| 7 | Monitoring | |
+| 6 | Security | done |
+| 7 | Monitoring | next |
 | 8 | Docker Compose | |
 | 9 | CI/CD | |
 | 10 | Documentation | |

@@ -136,8 +136,17 @@ class DeploymentController:
         active = self._deployments.active_for_device(device_id)
         return self._to_read(active) if active is not None else None
 
-    def update_status(self, deployment_id: str, update: DeploymentStatusUpdate) -> DeploymentRead:
+    def update_status(
+        self, deployment_id: str, update: DeploymentStatusUpdate, device_id: str | None = None
+    ) -> DeploymentRead:
+        """Apply a status report.
+
+        When ``device_id`` is given (always, for agent calls) the deployment must
+        belong to that device; otherwise it is reported as not found.
+        """
         deployment = self._require(deployment_id)
+        if device_id is not None and deployment.device_id != device_id:
+            raise DeploymentNotFoundError(deployment_id)
         current = DeploymentStatus(deployment.status)
         new = DeploymentStatus(update.status)
 

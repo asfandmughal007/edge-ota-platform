@@ -5,6 +5,8 @@ The only place in the agent that knows URLs and the auth header.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 from pydantic import SecretStr, ValidationError
 
@@ -34,11 +36,13 @@ class BackendClient:
         device_token: SecretStr,
         timeout: float = 10.0,
         transport: httpx.BaseTransport | None = None,
+        ca_bundle: Path | None = None,
     ) -> None:
         self._client = httpx.Client(
             base_url=backend_url,
             timeout=timeout,
             transport=transport,
+            verify=str(ca_bundle) if ca_bundle is not None else True,
             headers={"Authorization": f"Bearer {device_token.get_secret_value()}"},
         )
 
