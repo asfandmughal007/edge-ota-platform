@@ -15,15 +15,19 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
 from device_mgmt import __version__
-from device_mgmt.api import devices
+from device_mgmt.api import deployments, devices, versions
 from device_mgmt.config import Settings
 from device_mgmt.db import models  # noqa: F401  (registers tables on Base.metadata)
 from device_mgmt.db.session import Base, create_db_engine
 from device_mgmt.errors import (
+    DeploymentConflictError,
+    DeploymentNotFoundError,
     DeviceAlreadyExistsError,
     DeviceIdMismatchError,
     DeviceNotFoundError,
     DomainError,
+    VersionAlreadyExistsError,
+    VersionNotFoundError,
 )
 from device_mgmt.logging_setup import configure_logging
 from device_mgmt.services.registry import Clock, utcnow
@@ -32,6 +36,10 @@ _STATUS_BY_ERROR: dict[type[DomainError], int] = {
     DeviceNotFoundError: status.HTTP_404_NOT_FOUND,
     DeviceAlreadyExistsError: status.HTTP_409_CONFLICT,
     DeviceIdMismatchError: status.HTTP_400_BAD_REQUEST,
+    VersionNotFoundError: status.HTTP_404_NOT_FOUND,
+    VersionAlreadyExistsError: status.HTTP_409_CONFLICT,
+    DeploymentNotFoundError: status.HTTP_404_NOT_FOUND,
+    DeploymentConflictError: status.HTTP_409_CONFLICT,
 }
 
 
@@ -67,4 +75,6 @@ def create_app(settings: Settings | None = None, clock: Clock = utcnow) -> FastA
         return {"status": "ok"}
 
     app.include_router(devices.router)
+    app.include_router(versions.router)
+    app.include_router(deployments.router)
     return app

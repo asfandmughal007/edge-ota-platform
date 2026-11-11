@@ -20,6 +20,25 @@ class DeviceAlreadyExistsError(DomainError):
         self.device_id = device_id
 
 
+class VersionNotFoundError(DomainError):
+    def __init__(self, version: str) -> None:
+        super().__init__(f"software version '{version}' does not exist")
+
+
+class VersionAlreadyExistsError(DomainError):
+    def __init__(self, version: str) -> None:
+        super().__init__(f"software version '{version}' already exists")
+
+
+class DeploymentNotFoundError(DomainError):
+    def __init__(self, deployment_id: str) -> None:
+        super().__init__(f"deployment '{deployment_id}' does not exist")
+
+
+class DeploymentConflictError(DomainError):
+    """The deployment request or status change is not allowed in the current state."""
+
+
 class DeviceIdMismatchError(DomainError):
     def __init__(self, path_id: str, body_id: str) -> None:
         super().__init__(f"heartbeat for '{body_id}' was posted to device '{path_id}'")

@@ -85,3 +85,83 @@ class DeviceHealth(BaseModel):
     last_seen_at: datetime | None
     seconds_since_last_heartbeat: float | None
     metrics: HealthMetrics | None
+
+
+# --- Software versions -------------------------------------------------------
+
+SEMVER_PATTERN = r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
+SemVer = Annotated[str, StringConstraints(max_length=64, pattern=SEMVER_PATTERN)]
+# Loose check for a Docker image reference: registry/repo:tag or repo@sha256:...
+ImageRef = Annotated[
+    str, StringConstraints(min_length=1, max_length=255, pattern=r"^[a-z0-9][\w.\-/:@]*$")
+]
+Message = Annotated[str, StringConstraints(max_length=2000)]
+
+
+class VersionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: SemVer
+    image: ImageRef
+    notes: Message | None = None
+
+
+class VersionRead(BaseModel):
+    version: str
+    image: str
+    notes: str | None
+    created_at: datetime
+
+
+# --- Deployments -------------------------------------------------------------
+
+
+class DeploymentStatus(StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    SUCCEEDED = "succeeded"
+    # The update failed and the device is NOT known to be back on the previous version.
+    FAILED = "failed"
+    # The update failed and the device restored the previous version.
+    ROLLED_BACK = "rolled_back"
+
+
+class DeploymentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    device_id: DeviceId
+    target_version: SemVer
+
+
+class DeploymentStatusUpdate(BaseModel):
+    """Progress report from the device agent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal[
+        DeploymentStatus.IN_PROGRESS,
+        DeploymentStatus.SUCCEEDED,
+        DeploymentStatus.FAILED,
+        DeploymentStatus.ROLLED_BACK,
+    ]
+    message: Message | None = None
+
+
+class DeploymentEventRead(BaseModel):
+    status: DeploymentStatus
+    message: str | None
+    created_at: datetime
+
+
+class DeploymentRead(BaseModel):
+    id: str
+    device_id: str
+    target_version: str
+    image: str
+    previous_version: str | None
+    status: DeploymentStatus
+    message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    events: list[DeploymentEventRead]

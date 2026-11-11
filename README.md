@@ -11,8 +11,8 @@ updates to them, with automatic rollback when a new version fails its health che
 |---|---|---|
 | 1 | Device agent: metrics and heartbeat | done |
 | 2 | Device registry (FastAPI) | done |
-| 3 | Software versions and deployment requests | next |
-| 4 | OTA deployment | |
+| 3 | Software versions and deployment requests | done |
+| 4 | OTA deployment | next |
 | 5 | Rollback | |
 | 6 | Security | |
 | 7 | Monitoring | |

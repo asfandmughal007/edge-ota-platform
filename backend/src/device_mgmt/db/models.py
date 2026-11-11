@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Float, ForeignKey, Index, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, Float, ForeignKey, Index, String, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from device_mgmt.db.session import Base, UTCDateTime
 
@@ -40,3 +40,66 @@ class HeartbeatRecord(Base):
     disk_percent: Mapped[float] = mapped_column(Float)
     uptime_seconds: Mapped[float] = mapped_column(Float)
     network: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class SoftwareVersion(Base):
+    """A release that can be deployed: a version number and the image that ships it."""
+
+    __tablename__ = "software_versions"
+
+    version: Mapped[str] = mapped_column(String(64), primary_key=True)
+    image: Mapped[str] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+_ACTIVE_DEPLOYMENT = text("status IN ('pending', 'in_progress')")
+
+
+class Deployment(Base):
+    __tablename__ = "deployments"
+    __table_args__ = (
+        # The database, not just application code, guarantees a device never
+        # has two updates in flight, even with concurrent requests.
+        Index(
+            "uq_deployments_one_active_per_device",
+            "device_id",
+            unique=True,
+            sqlite_where=_ACTIVE_DEPLOYMENT,
+            postgresql_where=_ACTIVE_DEPLOYMENT,
+        ),
+        Index("ix_deployments_device_created", "device_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    device_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("devices.device_id", ondelete="CASCADE")
+    )
+    target_version: Mapped[str] = mapped_column(String(64), ForeignKey("software_versions.version"))
+    # Copied from the version at request time so the record of what was
+    # deployed stays accurate even if the catalog entry changes later.
+    image: Mapped[str] = mapped_column(String(255))
+    previous_version: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16))
+    message: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+    events: Mapped[list[DeploymentEvent]] = relationship(
+        order_by="DeploymentEvent.id", lazy="selectin", cascade="all, delete-orphan"
+    )
+
+
+class DeploymentEvent(Base):
+    """Append-only log of status transitions for one deployment."""
+
+    __tablename__ = "deployment_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    deployment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("deployments.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(16))
+    message: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
