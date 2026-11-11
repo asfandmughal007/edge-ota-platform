@@ -29,7 +29,7 @@ jobs:
         working-directory: ${{ matrix.component }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
           cache: pip
@@ -55,7 +55,7 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
           docker compose --profile tls config --quiet
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Lint scripts
