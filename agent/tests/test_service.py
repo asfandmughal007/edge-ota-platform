@@ -42,14 +42,11 @@ class RecordingSink:
             raise PublishError("backend unavailable")
         self.sent.append(heartbeat)
 
-    def close(self) -> None:
-        return None
-
 
 def make_service(sink: RecordingSink, interval: float = 0.001) -> HeartbeatService:
     return HeartbeatService(
         device_id="device-001",
-        software_version="1.2.0",
+        version_provider=lambda: "1.2.0",
         interval_seconds=interval,
         collector=SystemCollector(),
         sink=sink,

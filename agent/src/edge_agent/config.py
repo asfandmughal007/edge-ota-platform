@@ -7,6 +7,7 @@ environment (systemd EnvironmentFile, Docker secret, compose env).
 from __future__ import annotations
 
 import socket
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -32,6 +33,22 @@ class AgentSettings(BaseSettings):
     disk_path: str = "/"
     connectivity_timeout_seconds: float = Field(default=3.0, gt=0)
 
+    # --- OTA updates of the managed application container ---
+    updates_enabled: bool = True
+    deployment_poll_interval_seconds: float = Field(default=10.0, gt=0)
+    app_container_name: str = Field(default="edge-app", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+    app_container_port: int = Field(default=8080, ge=1, le=65535)
+    # Host port to publish the app on; unset when the agent reaches the app
+    # over a Docker network instead.
+    app_host_port: int | None = Field(default=8080, ge=1, le=65535)
+    app_network: str | None = None
+    # Derived from the settings above when unset; see ``resolved_app_health_url``.
+    app_health_url: str | None = None
+    app_health_timeout_seconds: float = Field(default=30.0, gt=0)
+    app_health_interval_seconds: float = Field(default=2.0, gt=0)
+    app_stop_timeout_seconds: int = Field(default=10, ge=0)
+    image_pull_policy: Literal["always", "if_not_present"] = "always"
+
     dry_run: bool = False
     log_level: str = "INFO"
 
@@ -53,6 +70,16 @@ class AgentSettings(BaseSettings):
                 "unless EDGE_AGENT_DRY_RUN is set"
             )
         return self
+
+    @property
+    def resolved_app_health_url(self) -> str:
+        if self.app_health_url is not None:
+            return self.app_health_url
+        if self.app_network is not None:
+            # On a shared Docker network the container name resolves via Docker DNS.
+            return f"http://{self.app_container_name}:{self.app_container_port}/health"
+        port = self.app_host_port if self.app_host_port is not None else self.app_container_port
+        return f"http://127.0.0.1:{port}/health"
 
     @property
     def connectivity_target(self) -> tuple[str, int] | None:

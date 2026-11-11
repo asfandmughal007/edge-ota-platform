@@ -53,3 +53,20 @@ def test_rejects_device_id_with_path_characters(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("EDGE_AGENT_DEVICE_ID", "../admin")
     with pytest.raises(ValidationError):
         AgentSettings()
+
+
+def test_app_health_url_is_derived_from_how_the_app_is_exposed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EDGE_AGENT_DRY_RUN", "true")
+    assert AgentSettings().resolved_app_health_url == "http://127.0.0.1:8080/health"
+
+    monkeypatch.setenv("EDGE_AGENT_APP_HOST_PORT", "9001")
+    assert AgentSettings().resolved_app_health_url == "http://127.0.0.1:9001/health"
+
+    monkeypatch.setenv("EDGE_AGENT_APP_NETWORK", "edge-net")
+    monkeypatch.setenv("EDGE_AGENT_APP_CONTAINER_NAME", "edge-app-device-001")
+    assert AgentSettings().resolved_app_health_url == "http://edge-app-device-001:8080/health"
+
+    monkeypatch.setenv("EDGE_AGENT_APP_HEALTH_URL", "http://10.0.0.9/ready")
+    assert AgentSettings().resolved_app_health_url == "http://10.0.0.9/ready"

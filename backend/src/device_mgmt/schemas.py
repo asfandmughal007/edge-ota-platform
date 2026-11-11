@@ -120,7 +120,9 @@ class DeploymentStatus(StrEnum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     SUCCEEDED = "succeeded"
-    # The update failed and the device is NOT known to be back on the previous version.
+    # The update did not complete and no rollback restored the previous version:
+    # either it failed before anything was switched (bad image, pull error) and
+    # the old version never stopped, or the rollback itself failed. See `message`.
     FAILED = "failed"
     # The update failed and the device restored the previous version.
     ROLLED_BACK = "rolled_back"

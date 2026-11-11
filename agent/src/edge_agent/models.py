@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 HEARTBEAT_SCHEMA_VERSION = 1
@@ -31,3 +33,19 @@ class Heartbeat(BaseModel):
     uptime_seconds: float = Field(ge=0)
     network: NetworkStatus
     timestamp: AwareDatetime
+
+
+class DeploymentCommand(BaseModel):
+    """A deployment as returned by ``GET /devices/{id}/deployments/next``."""
+
+    # The backend may add fields; an older agent must keep working.
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    id: str
+    target_version: str
+    image: str
+    previous_version: str | None = None
+    status: Literal["pending", "in_progress"]
+
+
+ReportStatus = Literal["in_progress", "succeeded", "failed", "rolled_back"]

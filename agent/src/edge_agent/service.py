@@ -22,14 +22,14 @@ class HeartbeatService:
     def __init__(
         self,
         device_id: str,
-        software_version: str,
+        version_provider: Callable[[], str],
         interval_seconds: float,
         collector: SystemCollector,
         sink: HeartbeatSink,
         clock: Callable[[], datetime] = _utcnow,
     ) -> None:
         self._device_id = device_id
-        self._software_version = software_version
+        self._version_provider = version_provider
         self._interval = interval_seconds
         self._collector = collector
         self._sink = sink
@@ -40,7 +40,7 @@ class HeartbeatService:
         return Heartbeat(
             device_id=self._device_id,
             hostname=metrics.hostname,
-            software_version=self._software_version,
+            software_version=self._version_provider(),
             cpu_percent=metrics.cpu_percent,
             memory_percent=metrics.memory_percent,
             disk_percent=metrics.disk_percent,
@@ -58,6 +58,7 @@ class HeartbeatService:
         try:
             heartbeat = self.build_heartbeat()
             self._sink.send(heartbeat)
+            version = heartbeat.software_version
         except PublishError as exc:
             logger.warning(
                 "heartbeat delivery failed",
@@ -70,7 +71,7 @@ class HeartbeatService:
             return False
         logger.info(
             "heartbeat sent",
-            extra={"device_id": self._device_id, "software_version": self._software_version},
+            extra={"device_id": self._device_id, "software_version": version},
         )
         return True
 
