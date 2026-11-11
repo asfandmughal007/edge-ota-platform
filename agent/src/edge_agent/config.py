@@ -47,9 +47,10 @@ class AgentSettings(BaseSettings):
     deployment_poll_interval_seconds: float = Field(default=10.0, gt=0)
     app_container_name: str = Field(default="edge-app", pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
     app_container_port: int = Field(default=8080, ge=1, le=65535)
-    # Host port to publish the app on; unset when the agent reaches the app
-    # over a Docker network instead.
-    app_host_port: int | None = Field(default=8080, ge=1, le=65535)
+    # Host port to publish the app on. Unset means: the container port when
+    # running on the host, nothing when the agent reaches the app over
+    # ``app_network`` (which lets many simulated devices share one machine).
+    app_host_port: int | None = Field(default=None, ge=1, le=65535)
     app_network: str | None = None
     # Derived from the settings above when unset; see ``resolved_app_health_url``.
     app_health_url: str | None = None
@@ -99,8 +100,13 @@ class AgentSettings(BaseSettings):
         if self.app_network is not None:
             # On a shared Docker network the container name resolves via Docker DNS.
             return f"http://{self.app_container_name}:{self.app_container_port}/health"
-        port = self.app_host_port if self.app_host_port is not None else self.app_container_port
-        return f"http://127.0.0.1:{port}/health"
+        return f"http://127.0.0.1:{self.published_host_port}/health"
+
+    @property
+    def published_host_port(self) -> int | None:
+        if self.app_network is not None:
+            return self.app_host_port
+        return self.app_host_port or self.app_container_port
 
     @property
     def connectivity_target(self) -> tuple[str, int] | None:

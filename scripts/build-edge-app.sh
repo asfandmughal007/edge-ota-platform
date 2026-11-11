@@ -4,7 +4,7 @@
 #   REGISTRY=localhost:5000 scripts/build-edge-app.sh
 #
 # 1.1.0 - 1.3.0 are healthy. 1.4.0 always fails its health check and exists to
-# demonstrate rollback.
+# demonstrate rollback. Runs on the host or inside the `seed` compose service.
 set -eu
 
 REGISTRY="${REGISTRY:-localhost:5000}"

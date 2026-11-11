@@ -110,3 +110,16 @@ def test_missing_or_empty_token_file_is_rejected(
 
     with pytest.raises(ValidationError, match="device_token_file"):
         AgentSettings()
+
+
+def test_host_port_is_published_by_default_but_not_on_a_shared_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EDGE_AGENT_DRY_RUN", "true")
+    assert AgentSettings().published_host_port == 8080
+
+    monkeypatch.setenv("EDGE_AGENT_APP_NETWORK", "edge-ota")
+    assert AgentSettings().published_host_port is None  # many devices can share one host
+
+    monkeypatch.setenv("EDGE_AGENT_APP_HOST_PORT", "9100")
+    assert AgentSettings().published_host_port == 9100

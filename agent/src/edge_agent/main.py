@@ -51,7 +51,7 @@ def build_updater(settings: AgentSettings, stack: ExitStack) -> Updater:
         config=AppConfig(
             container_name=settings.app_container_name,
             container_port=settings.app_container_port,
-            host_port=settings.app_host_port,
+            host_port=settings.published_host_port,
             network=settings.app_network,
             health_url=settings.resolved_app_health_url,
             pull_policy=settings.image_pull_policy,

@@ -16,8 +16,8 @@ updates to them, with automatic rollback when a new version fails its health che
 | 5 | Rollback | done |
 | 6 | Security | done |
 | 7 | Monitoring | done |
-| 8 | Docker Compose | next |
-| 9 | CI/CD | |
+| 8 | Docker Compose | done |
+| 9 | CI/CD | next |
 | 10 | Documentation | |
 
 ## Device agent quick start

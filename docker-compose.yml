@@ -1,0 +1,204 @@
+# Local development stack: backend + PostgreSQL + registry + three simulated devices.
+#
+#   cp .env.example .env     # then set the secrets
+#   docker compose up -d --build
+#   python scripts/demo.py   # walk through an update, an upgrade and a rollback
+#
+# Each "device" is a real agent container that manages a real application
+# container (edge-app-device-NNN) through the host's Docker daemon.
+
+name: edge-ota
+
+x-hardening: &hardening
+  # Least privilege for every service we build: no capabilities, no new
+  # privileges, read-only root filesystem.
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: [/tmp]
+
+x-simulator: &simulator
+  <<: *hardening
+  build:
+    context: .
+    dockerfile: agent/Dockerfile
+  image: edge-ota/agent:dev
+  restart: unless-stopped
+  # Docker socket access is root-equivalent on the host. On Linux set DOCKER_GID
+  # to your docker group's GID (getent group docker | cut -d: -f3) so the agent
+  # can stay non-root; Docker Desktop does not need it.
+  group_add: ["${DOCKER_GID:-0}"]
+  depends_on:
+    backend: { condition: service_healthy }
+    provision: { condition: service_completed_successfully }
+    seed: { condition: service_completed_successfully }
+
+x-simulator-env: &simulator-env
+  EDGE_AGENT_BACKEND_URL: http://backend:8000
+  EDGE_AGENT_HEARTBEAT_INTERVAL_SECONDS: "5"
+  EDGE_AGENT_DEPLOYMENT_POLL_INTERVAL_SECONDS: "2"
+  EDGE_AGENT_APP_NETWORK: edge-ota
+  EDGE_AGENT_APP_HEALTH_TIMEOUT_SECONDS: "20"
+  EDGE_AGENT_APP_HEALTH_INTERVAL_SECONDS: "1"
+  EDGE_AGENT_APP_STOP_TIMEOUT_SECONDS: "3"
+  EDGE_AGENT_DEVICE_TOKEN_FILE: /run/secrets/device_token
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: device_mgmt
+      POSTGRES_USER: device_mgmt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U device_mgmt -d device_mgmt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: edge-ota/backend:dev
+    restart: unless-stopped
+    environment:
+      DEVICE_MGMT_DATABASE_URL: postgresql+psycopg://device_mgmt:${POSTGRES_PASSWORD}@db:5432/device_mgmt
+      DEVICE_MGMT_ADMIN_API_KEY: ${DEVICE_MGMT_ADMIN_API_KEY:?set DEVICE_MGMT_ADMIN_API_KEY in .env}
+      DEVICE_MGMT_REQUIRE_HTTPS: ${DEVICE_MGMT_REQUIRE_HTTPS:-false}
+      DEVICE_MGMT_HEARTBEAT_STALE_AFTER_SECONDS: "20"
+      DEVICE_MGMT_HEARTBEAT_OFFLINE_AFTER_SECONDS: "60"
+      DEVICE_MGMT_MONITOR_INTERVAL_SECONDS: "5"
+      # Trust X-Forwarded-Proto from the TLS proxy (profile "tls") on this private network.
+      FORWARDED_ALLOW_IPS: "*"
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db: { condition: service_healthy }
+
+  registry:
+    image: registry:2
+    restart: unless-stopped
+    ports:
+      # Bound to loopback: the Docker daemon treats localhost registries as
+      # trusted over HTTP, and nothing outside this machine can push images.
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:5000/v2/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: build the test application at several versions and push them.
+  seed:
+    image: docker:27-cli
+    restart: "no"
+    environment:
+      REGISTRY: localhost:5000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts:/work/scripts:ro
+      - ./edge-app:/work/edge-app:ro
+    entrypoint: ["sh", "/work/scripts/build-edge-app.sh"]
+    depends_on:
+      registry: { condition: service_healthy }
+
+  # One-shot: publish versions, register devices and hand each its own token.
+  provision:
+    <<: *hardening
+    image: edge-ota/agent:dev
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    restart: "no"
+    # Root only so it can hand each token file to the agent's UID (CHOWN) and
+    # replace files the agent's user owns (DAC_OVERRIDE). Nothing else.
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE]
+    environment:
+      DEVICE_MGMT_URL: http://backend:8000
+      DEVICE_MGMT_ADMIN_API_KEY: ${DEVICE_MGMT_ADMIN_API_KEY:?set DEVICE_MGMT_ADMIN_API_KEY in .env}
+    volumes:
+      - ./scripts:/scripts:ro
+      - tokens-001:/tokens/device-001
+      - tokens-002:/tokens/device-002
+      - tokens-003:/tokens/device-003
+    entrypoint:
+      - python
+      - /scripts/provision_devices.py
+      - --devices
+      - device-001
+      - device-002
+      - device-003
+      - --versions
+      - 1.1.0
+      - 1.2.0
+      - 1.3.0
+      - 1.4.0
+    depends_on:
+      backend: { condition: service_healthy }
+
+  simulator-001:
+    <<: *simulator
+    hostname: device-001
+    environment:
+      <<: *simulator-env
+      EDGE_AGENT_DEVICE_ID: device-001
+      EDGE_AGENT_APP_CONTAINER_NAME: edge-app-device-001
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - tokens-001:/run/secrets:ro  # this device's token only
+
+  simulator-002:
+    <<: *simulator
+    hostname: device-002
+    environment:
+      <<: *simulator-env
+      EDGE_AGENT_DEVICE_ID: device-002
+      EDGE_AGENT_APP_CONTAINER_NAME: edge-app-device-002
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - tokens-002:/run/secrets:ro
+
+  simulator-003:
+    <<: *simulator
+    hostname: device-003
+    environment:
+      <<: *simulator-env
+      EDGE_AGENT_DEVICE_ID: device-003
+      EDGE_AGENT_APP_CONTAINER_NAME: edge-app-device-003
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - tokens-003:/run/secrets:ro
+
+  # Optional TLS front end:  docker compose --profile tls up -d caddy
+  caddy:
+    profiles: ["tls"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      backend: { condition: service_healthy }
+
+networks:
+  default:
+    # A fixed name so the agents can attach the containers they start to it.
+    name: edge-ota
+
+volumes:
+  db-data:
+  registry-data:
+  caddy-data:
+  tokens-001:
+  tokens-002:
+  tokens-003:
