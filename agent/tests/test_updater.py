@@ -79,6 +79,7 @@ def test_pull_failure_leaves_the_running_version_untouched(
 
     assert result.outcome == "failed"
     assert "pull failed" in result.message
+    assert "nothing was changed" in result.message
     assert runtime.calls == [f"pull {image('9.9.9')}"]
     assert runtime.running_version() == "1.2.0"
     assert health.checks == []
@@ -156,15 +157,19 @@ def test_redeploying_same_version_under_a_new_deployment_does_switch(
 
 
 @pytest.mark.parametrize("operation", ["stop", "rename", "run"])
-def test_runtime_errors_become_failed_results(
-    runtime: FakeRuntime, health: FakeHealth, operation: str
-) -> None:
+def test_runtime_error_during_the_switch_rolls_back(health: FakeHealth, operation: str) -> None:
+    runtime = FakeRuntime()
+    runtime.seed_running("1.2.0")
+    updater = make_updater(runtime, health)
     runtime.fail_on.add(operation)
 
-    result = make_updater(runtime, health).apply(command("1.3.0"))
+    result = updater.apply(command("1.3.0"))
 
-    assert result.outcome == "failed"
+    assert result.outcome == "rolled_back"
     assert "simulated failure" in result.message
+    assert "rolled back to version 1.2.0" in result.message
+    assert runtime.running_version() == "1.2.0"
+    assert list(runtime.containers) == ["edge-app"]
 
 
 def test_docker_daemon_unreachable_is_a_failed_result_not_a_crash(

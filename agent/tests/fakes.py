@@ -142,9 +142,9 @@ class FakeHealth:
 
     def __init__(self, healthy_versions: tuple[str, ...] = ("1.2.0", "1.3.0")) -> None:
         self.healthy_versions = set(healthy_versions)
-        self.checks: list[tuple[str, str]] = []
+        self.checks: list[tuple[str, str | None]] = []
 
-    def wait_until_healthy(self, url: str, expected_version: str) -> HealthResult:
+    def wait_until_healthy(self, url: str, expected_version: str | None) -> HealthResult:
         self.checks.append((url, expected_version))
         if expected_version in self.healthy_versions:
             return HealthResult(True, "HTTP 200")

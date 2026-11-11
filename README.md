@@ -13,8 +13,8 @@ updates to them, with automatic rollback when a new version fails its health che
 | 2 | Device registry (FastAPI) | done |
 | 3 | Software versions and deployment requests | done |
 | 4 | OTA deployment | done |
-| 5 | Rollback | next |
-| 6 | Security | |
+| 5 | Rollback | done |
+| 6 | Security | next |
 | 7 | Monitoring | |
 | 8 | Docker Compose | |
 | 9 | CI/CD | |

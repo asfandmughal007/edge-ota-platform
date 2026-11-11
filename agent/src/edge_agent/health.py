@@ -17,7 +17,8 @@ class HealthResult:
 
 
 class HealthChecker(Protocol):
-    def wait_until_healthy(self, url: str, expected_version: str) -> HealthResult: ...
+    def wait_until_healthy(self, url: str, expected_version: str | None) -> HealthResult:
+        """Block until the app is healthy or a deadline passes. None skips the version check."""
 
 
 class HttpHealthChecker:
@@ -43,7 +44,7 @@ class HttpHealthChecker:
         self._sleep = sleep
         self._monotonic = monotonic
 
-    def check_once(self, url: str, expected_version: str) -> HealthResult:
+    def check_once(self, url: str, expected_version: str | None) -> HealthResult:
         try:
             response = self._client.get(url)
         except httpx.HTTPError as exc:
@@ -55,11 +56,11 @@ class HttpHealthChecker:
         except ValueError:
             body = None
         reported = body.get("version") if isinstance(body, dict) else None
-        if reported is not None and reported != expected_version:
+        if expected_version is not None and reported not in (None, expected_version):
             return HealthResult(False, f"reports version {reported}, expected {expected_version}")
         return HealthResult(True, "HTTP 200")
 
-    def wait_until_healthy(self, url: str, expected_version: str) -> HealthResult:
+    def wait_until_healthy(self, url: str, expected_version: str | None) -> HealthResult:
         deadline = self._monotonic() + self._timeout
         attempts = 0
         while True:
