@@ -30,7 +30,11 @@ AGENT_UID = 10001
 
 
 def call(
-    base_url: str, api_key: str, method: str, path: str, body: dict[str, Any] | None = None
+    base_url: str,
+    api_key: str,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(
@@ -97,7 +101,9 @@ def write_token(tokens_dir: Path, device_id: str, token: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--devices", nargs="*", default=[], help="device IDs to register")
+    parser.add_argument(
+        "--devices", nargs="*", default=[], help="device IDs to register"
+    )
     parser.add_argument("--versions", nargs="*", default=[], help="versions to publish")
     parser.add_argument("--image-prefix", default="localhost:5000/my-edge-app")
     parser.add_argument("--tokens-dir", type=Path, default=Path("/tokens"))
@@ -120,23 +126,31 @@ def main() -> int:
         )
         if status not in (201, 409):
             sys.exit(f"publishing {version} failed: HTTP {status} {body}")
-        print(f"version {version}: {'published' if status == 201 else 'already exists'}")
+        print(
+            f"version {version}: {'published' if status == 201 else 'already exists'}"
+        )
 
     for device_id in args.devices:
-        status, body = call(base_url, api_key, "POST", "/devices", {"device_id": device_id})
+        status, body = call(
+            base_url, api_key, "POST", "/devices", {"device_id": device_id}
+        )
         if status == 409:
             existing = read_token(args.tokens_dir, device_id)
             if existing is not None and token_works(base_url, device_id, existing):
                 print(f"device {device_id}: already provisioned, token still valid")
                 continue
-            status, body = call(base_url, api_key, "POST", f"/devices/{device_id}/token")
+            status, body = call(
+                base_url, api_key, "POST", f"/devices/{device_id}/token"
+            )
             action = "token rotated (missing or rejected)"
         else:
             action = "registered"
         if status not in (200, 201):
             sys.exit(f"provisioning {device_id} failed: HTTP {status} {body}")
         write_token(args.tokens_dir, device_id, body["device_token"])
-        print(f"device {device_id}: {action}, token written")  # the token itself is never printed
+        print(
+            f"device {device_id}: {action}, token written"
+        )  # the token itself is never printed
     return 0
 
 

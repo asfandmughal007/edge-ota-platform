@@ -7,6 +7,11 @@
 2. upgrade all three to 1.3.0
 3. push the deliberately broken 1.4.0 to device-003 and watch it roll back
 
+Exits non-zero if the outcome is not exactly the expected one, so CI can use it
+as an end-to-end test. It expects a fresh stack: it asserts the complete
+deployment history, so a second run on the same stack reports a failure. Run
+``make clean`` first to start over.
+
 Standard library only. Reads DEVICE_MGMT_ADMIN_API_KEY from the environment or ./.env.
 """
 
@@ -67,7 +72,9 @@ def wait_until(description: str, predicate: Any, timeout: float = 120) -> None:
 def deploy(device_ids: list[str], version: str) -> list[dict[str, Any]]:
     print(f"\n=== deploying {version} to {', '.join(device_ids)}")
     created = {
-        device_id: api("POST", "/deployments", {"device_id": device_id, "target_version": version})
+        device_id: api(
+            "POST", "/deployments", {"device_id": device_id, "target_version": version}
+        )
         for device_id in device_ids
     }
     results: dict[str, dict[str, Any]] = {}
@@ -100,6 +107,7 @@ def main() -> int:
     deploy(["device-003"], "1.4.0")
 
     time.sleep(6)  # let a heartbeat report the post-rollback state
+    problems: list[str] = []
 
     print("\n=== device state")
     for device_id in DEVICES:
@@ -109,15 +117,44 @@ def main() -> int:
             f"{device_id}: {health['status']}, running {health['current_version']}, "
             f"app healthy={app.get('healthy')}"
         )
+        if (health["status"], health["current_version"], app.get("healthy")) != (
+            "online",
+            "1.3.0",
+            True,
+        ):
+            problems.append(
+                f"{device_id} is not online, healthy and on 1.3.0: {health}"
+            )
 
     print("\n=== deployment history of device-003")
-    for deployment in reversed(api("GET", "/devices/device-003/deployments")):
+    history = list(reversed(api("GET", "/devices/device-003/deployments")))
+    for deployment in history:
         print(f"{deployment['target_version']:>6}  {deployment['status']}")
+    outcomes = [(d["target_version"], d["status"]) for d in history]
+    if outcomes != [
+        ("1.2.0", "succeeded"),
+        ("1.3.0", "succeeded"),
+        ("1.4.0", "rolled_back"),
+    ]:
+        problems.append(f"unexpected deployment history for device-003: {outcomes}")
 
     print("\n=== fleet summary")
     summary = api("GET", "/fleet/summary")
-    print(json.dumps({k: summary[k] for k in summary if k != "devices_by_status"}, indent=2))
+    print(
+        json.dumps(
+            {k: summary[k] for k in summary if k != "devices_by_status"}, indent=2
+        )
+    )
     print("devices_by_status:", summary["devices_by_status"])
+    if summary["deployments_by_status"]["rolled_back"] != 1:
+        problems.append(
+            "fleet summary does not show exactly one rolled-back deployment"
+        )
+
+    if problems:
+        print("\nDEMO FAILED:", *problems, sep="\n  - ")
+        return 1
+    print("\nDEMO OK: upgrades succeeded and the broken release was rolled back")
     return 0
 
 
