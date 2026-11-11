@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     heartbeat_stale_after_seconds: float = Field(default=90.0, gt=0)
     heartbeat_offline_after_seconds: float = Field(default=300.0, gt=0)
 
+    # Background monitor: how often to look for devices that went quiet (0 disables it).
+    monitor_interval_seconds: float = Field(default=15.0, ge=0)
+    # Raw heartbeat rows older than this are deleted. Device state, deployment
+    # history and events are kept regardless.
+    heartbeat_retention_days: float = Field(default=7.0, gt=0)
+
     log_level: str = "INFO"
 
     @model_validator(mode="after")

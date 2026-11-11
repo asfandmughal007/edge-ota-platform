@@ -17,6 +17,9 @@ class HealthResult:
 
 
 class HealthChecker(Protocol):
+    def check_once(self, url: str, expected_version: str | None) -> HealthResult:
+        """A single, non-retrying probe."""
+
     def wait_until_healthy(self, url: str, expected_version: str | None) -> HealthResult:
         """Block until the app is healthy or a deadline passes. None skips the version check."""
 

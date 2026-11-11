@@ -28,6 +28,8 @@ def make_settings(**overrides: Any) -> Settings:
     fields: dict[str, Any] = {
         "database_url": "sqlite://",
         "admin_api_key": ADMIN_KEY,
+        # Tests drive the monitor explicitly (see monitor_of) so results are deterministic.
+        "monitor_interval_seconds": 0,
         "heartbeat_stale_after_seconds": 90,
         "heartbeat_offline_after_seconds": 300,
     }

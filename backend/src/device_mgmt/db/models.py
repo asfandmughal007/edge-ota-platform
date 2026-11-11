@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Float, ForeignKey, Index, String, text
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from device_mgmt.db.session import Base, UTCDateTime
@@ -24,6 +24,11 @@ class Device(Base):
     # Server receive time of the latest heartbeat. Liveness never trusts the
     # device's own clock, which may be wrong on a board without an RTC.
     last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # Status as last recorded by the monitor or a heartbeat, used to detect transitions.
+    last_status: Mapped[str] = mapped_column(String(16), default="never_seen")
+    # The managed application as last reported by the agent.
+    app_state: Mapped[str | None] = mapped_column(String(16))
+    app_healthy: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class HeartbeatRecord(Base):
@@ -42,6 +47,22 @@ class HeartbeatRecord(Base):
     disk_percent: Mapped[float] = mapped_column(Float)
     uptime_seconds: Mapped[float] = mapped_column(Float)
     network: Mapped[dict[str, Any]] = mapped_column(JSON)
+    app: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class DeviceEvent(Base):
+    """Notable changes in a device's life: went offline, came back, app unhealthy."""
+
+    __tablename__ = "device_events"
+    __table_args__ = (Index("ix_device_events_device_created", "device_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("devices.device_id", ondelete="CASCADE")
+    )
+    event_type: Mapped[str] = mapped_column(String(32))
+    detail: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime())
 
 
 class SoftwareVersion(Base):

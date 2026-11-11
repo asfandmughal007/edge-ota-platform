@@ -20,6 +20,17 @@ class NetworkStatus(BaseModel):
     backend_reachable: bool | None
 
 
+class AppStatus(BaseModel):
+    """The managed application container, as observed on this device."""
+
+    model_config = ConfigDict(frozen=True)
+
+    state: Literal["running", "stopped", "absent", "updating", "unknown"]
+    # None when health was not checked: not running, mid-update, or Docker unreachable.
+    healthy: bool | None = None
+    version: str | None = None
+
+
 class Heartbeat(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -32,6 +43,7 @@ class Heartbeat(BaseModel):
     disk_percent: float = Percent
     uptime_seconds: float = Field(ge=0)
     network: NetworkStatus
+    app: AppStatus | None = None
     timestamp: AwareDatetime
 
 

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query, status
 from device_mgmt.api.deps import AdminRequired, DeviceIdPath, DevicePathAuth, RegistryDep
 from device_mgmt.schemas import (
     DeviceCreate,
+    DeviceEventRead,
     DeviceHealth,
     DeviceRead,
     DeviceRegistered,
@@ -65,6 +66,22 @@ def get_device(device_id: DeviceIdPath, registry: RegistryDep) -> DeviceRead:
 )
 def get_device_health(device_id: DeviceIdPath, registry: RegistryDep) -> DeviceHealth:
     return registry.health(device_id)
+
+
+@router.get(
+    "/{device_id}/events",
+    response_model=list[DeviceEventRead],
+    dependencies=[AdminRequired],
+    responses={**_UNAUTHORIZED, 404: {}},
+)
+def list_device_events(
+    device_id: DeviceIdPath,
+    registry: RegistryDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[DeviceEventRead]:
+    """Status changes and application health changes, newest first."""
+    return registry.events(device_id, limit=limit, offset=offset)
 
 
 @router.post(

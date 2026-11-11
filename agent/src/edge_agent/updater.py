@@ -23,12 +23,13 @@ No state file can drift out of sync with reality.
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
 from edge_agent.health import HealthChecker
-from edge_agent.models import DeploymentCommand
+from edge_agent.models import AppStatus, DeploymentCommand
 from edge_agent.runtime import ContainerRuntime, ContainerRuntimeError, ContainerSpec
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ class Updater:
         self._runtime = runtime
         self._health = health
         self._config = config
+        self._updating = threading.Event()
 
     def current_version(self) -> str | None:
         """Version of the running app container, or None if there is none."""
@@ -85,7 +87,32 @@ class Updater:
             return None
         return container.labels.get(VERSION_LABEL)
 
+    def app_status(self) -> AppStatus:
+        """Observe the managed app for the heartbeat. Raises ContainerRuntimeError.
+
+        While an update is running the new container is *expected* to fail
+        health checks for a few seconds, so health is not judged then. The
+        backend must not raise an alarm during a perfectly normal update.
+        """
+        if self._updating.is_set():
+            return AppStatus(state="updating")
+        container = self._runtime.get(self._config.container_name)
+        if container is None:
+            return AppStatus(state="absent")
+        version = container.labels.get(VERSION_LABEL)
+        if not container.running:
+            return AppStatus(state="stopped", version=version)
+        result = self._health.check_once(self._config.health_url, version)
+        return AppStatus(state="running", healthy=result.healthy, version=version)
+
     def apply(self, command: DeploymentCommand) -> UpdateResult:
+        self._updating.set()
+        try:
+            return self._apply(command)
+        finally:
+            self._updating.clear()
+
+    def _apply(self, command: DeploymentCommand) -> UpdateResult:
         log = {"deployment_id": command.id, "target_version": command.target_version}
         # False until the old version may have been disturbed. Failures before
         # that point need no rollback; failures after it always attempt one.

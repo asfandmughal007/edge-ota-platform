@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from device_mgmt.db.models import Deployment, Device, HeartbeatRecord, SoftwareVersion
+from device_mgmt.db.models import Deployment, Device, DeviceEvent, HeartbeatRecord, SoftwareVersion
 
 ACTIVE_STATUSES = ("pending", "in_progress")
 
@@ -75,6 +75,19 @@ class DeviceRepository:
 
     def add(self, device: Device) -> None:
         self._session.add(device)
+
+    def add_event(self, event: DeviceEvent) -> None:
+        self._session.add(event)
+
+    def list_events(self, device_id: str, limit: int, offset: int) -> Sequence[DeviceEvent]:
+        statement = (
+            select(DeviceEvent)
+            .where(DeviceEvent.device_id == device_id)
+            .order_by(DeviceEvent.created_at.desc(), DeviceEvent.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return self._session.scalars(statement).all()
 
     def add_heartbeat(self, record: HeartbeatRecord) -> None:
         self._session.add(record)

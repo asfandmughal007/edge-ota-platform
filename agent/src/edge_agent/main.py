@@ -8,7 +8,7 @@ import os
 import signal
 import sys
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from contextlib import ExitStack
 from types import FrameType
 from urllib.parse import urlsplit
@@ -20,7 +20,7 @@ from edge_agent.collector import SystemCollector
 from edge_agent.config import AgentSettings
 from edge_agent.health import HttpHealthChecker
 from edge_agent.logging_setup import configure_logging
-from edge_agent.runtime import ContainerRuntimeError, DockerRuntime
+from edge_agent.runtime import DockerRuntime
 from edge_agent.service import HeartbeatService
 from edge_agent.sinks import HeartbeatSink, HttpHeartbeatSink, StdoutHeartbeatSink
 from edge_agent.updater import AppConfig, Updater
@@ -60,27 +60,6 @@ def build_updater(settings: AgentSettings, stack: ExitStack) -> Updater:
     )
 
 
-def version_provider(settings: AgentSettings, updater: Updater | None) -> Callable[[], str]:
-    """Report the version of the container actually running, when there is one.
-
-    Falls back to the configured version if updates are disabled, nothing is
-    deployed yet, or Docker cannot be reached.
-    """
-
-    def provide() -> str:
-        if updater is not None:
-            try:
-                running = updater.current_version()
-            except ContainerRuntimeError as exc:
-                logger.debug("could not read running version", extra={"error": str(exc)})
-            else:
-                if running is not None:
-                    return running
-        return settings.software_version
-
-    return provide
-
-
 def build_heartbeat_service(
     settings: AgentSettings, sink: HeartbeatSink, updater: Updater | None
 ) -> HeartbeatService:
@@ -91,7 +70,8 @@ def build_heartbeat_service(
     )
     return HeartbeatService(
         device_id=settings.device_id,
-        version_provider=version_provider(settings, updater),
+        default_version=settings.software_version,
+        app_observer=updater.app_status if updater is not None else (lambda: None),
         interval_seconds=settings.heartbeat_interval_seconds,
         collector=collector,
         sink=sink,

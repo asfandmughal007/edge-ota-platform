@@ -155,6 +155,7 @@ def test_health_before_first_heartbeat(client: TestClient) -> None:
         "last_seen_at": None,
         "seconds_since_last_heartbeat": None,
         "metrics": None,
+        "application": None,
     }
 
 

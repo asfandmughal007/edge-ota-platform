@@ -46,7 +46,7 @@ class RecordingSink:
 def make_service(sink: RecordingSink, interval: float = 0.001) -> HeartbeatService:
     return HeartbeatService(
         device_id="device-001",
-        version_provider=lambda: "1.2.0",
+        default_version="1.2.0",
         interval_seconds=interval,
         collector=SystemCollector(),
         sink=sink,

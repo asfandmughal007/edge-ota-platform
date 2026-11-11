@@ -55,6 +55,16 @@ class NetworkStatus(BaseModel):
     backend_reachable: bool | None
 
 
+class AppStatus(BaseModel):
+    """The managed application on the device, as observed by its agent."""
+
+    # "updating": an OTA update is in progress, so health is deliberately not judged.
+    state: Literal["running", "stopped", "absent", "updating", "unknown"]
+    # None when it could not be checked (not running, or Docker unreachable).
+    healthy: bool | None = None
+    version: Version | None = None
+
+
 class HeartbeatIn(BaseModel):
     """Heartbeat as sent by the agent (see agent/src/edge_agent/models.py).
 
@@ -71,6 +81,8 @@ class HeartbeatIn(BaseModel):
     disk_percent: Percent
     uptime_seconds: Annotated[float, Field(ge=0)]
     network: NetworkStatus
+    # Optional so agents without a managed application (or older agents) still work.
+    app: AppStatus | None = None
     timestamp: AwareDatetime
 
 
@@ -96,6 +108,23 @@ class DeviceHealth(BaseModel):
     last_seen_at: datetime | None
     seconds_since_last_heartbeat: float | None
     metrics: HealthMetrics | None
+    application: AppStatus | None
+
+
+class DeviceEventRead(BaseModel):
+    event_type: str
+    detail: str | None
+    created_at: datetime
+
+
+class FleetSummary(BaseModel):
+    total_devices: int
+    devices_by_status: dict[str, int]
+    devices_by_version: dict[str, int]
+    apps_unhealthy: int
+    deployments_by_status: dict[str, int]
+    # Deployments that failed or were rolled back in the last 24 hours.
+    unsuccessful_deployments_24h: int
 
 
 # --- Software versions -------------------------------------------------------
