@@ -10,8 +10,8 @@ updates to them, with automatic rollback when a new version fails its health che
 | Stage | Scope | State |
 |---|---|---|
 | 1 | Device agent: metrics and heartbeat | done |
-| 2 | Device registry (FastAPI) | next |
-| 3 | Software versions and deployment requests | |
+| 2 | Device registry (FastAPI) | done |
+| 3 | Software versions and deployment requests | next |
 | 4 | OTA deployment | |
 | 5 | Rollback | |
 | 6 | Security | |
@@ -30,3 +30,13 @@ python -m venv .venv
 
 Configuration is read from `EDGE_AGENT_*` environment variables; see
 [agent/src/edge_agent/config.py](agent/src/edge_agent/config.py).
+
+## Backend quick start
+
+```bash
+.venv/bin/pip install -e "backend[dev]"
+.venv/bin/uvicorn device_mgmt.main:create_app --factory --reload
+```
+
+Interactive API docs are served at http://localhost:8000/docs. Configuration is
+read from `DEVICE_MGMT_*` environment variables; see [.env.example](.env.example).

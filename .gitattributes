@@ -1,0 +1,2 @@
+# Everything here ends up in Linux containers; CRLF breaks shell scripts and entrypoints.
+* text=auto eol=lf
