@@ -19,7 +19,7 @@ dependencies = [
 dev = [
     "mypy>=1.10",
     "pytest>=8.0",
-    "ruff>=0.5",
+    "ruff>=0.17.4",
     "types-docker",
     "types-psutil",
 ]
