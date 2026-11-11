@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context is the repository root:  docker build -f backend/Dockerfile .
 
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 WORKDIR /src
 COPY backend/pyproject.toml ./pyproject.toml
 COPY backend/src ./src
@@ -10,7 +10,7 @@ COPY backend/src ./src
 RUN pip install --no-cache-dir --prefix=/install ".[postgres]"
 
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app
