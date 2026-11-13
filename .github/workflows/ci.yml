@@ -174,8 +174,11 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
 
+      # Pinned to a full commit SHA, not a tag: this action was compromised in
+      # March 2026 by retargeting tags, and a SHA cannot be retargeted.
+      # SHA is the commit behind release v0.36.0.
       - name: Scan for critical vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: scan:${{ matrix.name }}
           severity: CRITICAL

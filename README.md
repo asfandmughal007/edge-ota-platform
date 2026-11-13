@@ -531,9 +531,12 @@ scan but never push. The agent and test-app images are multi-arch
 and SBOM attestations are attached, and the workflow requests only the
 permissions each job needs.
 
-The workflow was validated locally with `actionlint`, and the end-to-end job's
-steps were run by hand against the same compose stack, but it has **not yet run
-on GitHub**: that happens on the first push.
+On its first run on GitHub the test, compose and end-to-end jobs passed (the
+end-to-end job ran the real OTA and rollback scenario on the runner). The image
+jobs failed to start because they referenced a Trivy action tag that no longer
+exists after that action's March 2026 supply-chain compromise; it is now pinned
+to a commit SHA. Publishing to GHCR (login, scan, multi-arch build, push) is the
+one part that has not yet been seen to complete.
 
 ## Design decisions and trade-offs
 

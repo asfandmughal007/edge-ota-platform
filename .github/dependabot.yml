@@ -1,20 +1,32 @@
 version: 2
+
+# Grouped, capped and monthly: otherwise the first run opens a separate pull
+# request (and a full CI run) for every dependency at once.
 updates:
   - package-ecosystem: pip
-    directory: /agent
-    schedule: { interval: weekly }
-  - package-ecosystem: pip
-    directory: /backend
-    schedule: { interval: weekly }
+    directories: [/agent, /backend]
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 3
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+
   - package-ecosystem: docker
-    directory: /backend
-    schedule: { interval: weekly }
-  - package-ecosystem: docker
-    directory: /agent
-    schedule: { interval: weekly }
-  - package-ecosystem: docker
-    directory: /edge-app
-    schedule: { interval: weekly }
+    directories: [/backend, /agent, /edge-app]
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 3
+    ignore:
+      # Stay on the Python versions CI tests; take patch and minor updates only.
+      - dependency-name: python
+        update-types: ["version-update:semver-major"]
+    groups:
+      base-images:
+        patterns: ["*"]
+
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
