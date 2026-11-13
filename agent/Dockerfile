@@ -2,14 +2,14 @@
 # Build context is the repository root:  docker build -f agent/Dockerfile .
 # Used both for the device simulators and as the image the agent ships in.
 
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 WORKDIR /src
 COPY agent/pyproject.toml ./pyproject.toml
 COPY agent/src ./src
 RUN pip install --no-cache-dir --prefix=/install .
 
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin agent
