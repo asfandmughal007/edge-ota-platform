@@ -531,12 +531,16 @@ scan but never push. The agent and test-app images are multi-arch
 and SBOM attestations are attached, and the workflow requests only the
 permissions each job needs.
 
-On its first run on GitHub the test, compose and end-to-end jobs passed (the
-end-to-end job ran the real OTA and rollback scenario on the runner). The image
-jobs failed to start because they referenced a Trivy action tag that no longer
-exists after that action's March 2026 supply-chain compromise; it is now pinned
-to a commit SHA. Publishing to GHCR (login, scan, multi-arch build, push) is the
-one part that has not yet been seen to complete.
+All jobs pass on GitHub, including the end-to-end job, which runs the real OTA
+and rollback scenario on the runner, and the three image jobs, which publish to
+GHCR. The published images can be pulled anonymously; the agent and test-app
+manifests list both `linux/amd64` and `linux/arm64`, and each carries provenance
+and SBOM attestations.
+
+One lesson from the first run: the image jobs failed to start because they
+referenced a Trivy action tag that no longer exists after that action's March
+2026 supply-chain compromise. The scanner is now pinned to a commit SHA, which
+cannot be retargeted the way tags were.
 
 ## Design decisions and trade-offs
 
